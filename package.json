@@ -2,6 +2,14 @@
   "name": "react-electron-firewall",
   "version": "0.1.0",
   "private": true,
+  "main": "electron.js",
+  "build": {
+    "appId": "com.example.myapp",
+    "productName": "My Electron App",
+    "directories": {
+      "output": "dist"
+    }
+  },
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
@@ -12,6 +20,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "electron": "electron .",
+    "dist": "electron-builder",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
@@ -34,5 +44,10 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-is-dev": "^3.0.1"
   }
 }
