@@ -6,9 +6,16 @@ function App() {
   const [domain, setDomain] = useState("");
   const [domains, setDomains] = useState([]);
 
+  const handleRemoveDomain = (domainToRemove) => {
+    setDomains(domains.filter((d) => d !== domainToRemove));
+  };
+
   const handleAddDomain = () => {
-    setDomains([...domains, domain]);
-    setDomain("");
+    if (domain) {
+      window.electron.send("block-domain", domain);
+      setDomains([...domains, domain]);
+      setDomain("");
+    }
   };
 
   return (
@@ -24,7 +31,10 @@ function App() {
         <button onClick={handleAddDomain}>Add Domain</button>
         <ul>
           {domains.map((d, index) => (
-            <li key={index}>{d}</li>
+            <li key={index}>
+              {d}
+              <button onClick={() => handleRemoveDomain(d)}>Eliminar</button>
+            </li>
           ))}
         </ul>
       </header>
