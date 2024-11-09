@@ -7,6 +7,7 @@ function App() {
   const [domains, setDomains] = useState([]);
 
   const handleRemoveDomain = (domainToRemove) => {
+    window.electron.send("unblock-domain", domainToRemove);
     setDomains(domains.filter((d) => d !== domainToRemove));
   };
 
