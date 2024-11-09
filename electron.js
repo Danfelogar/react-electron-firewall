@@ -1,17 +1,17 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
-const http = require("http");
-const httpProxy = require("http-proxy");
+const fs = require("fs");
 const path = require("path");
+const sudo = require("sudo-prompt");
 
 let isDev;
 let mainWindow;
-const blockedDomains = [];
-const proxy = httpProxy.createProxyServer({});
+let blockedDomains = [];
+const hostsFilePath = "/etc/hosts";
+const hostsBackupPath = path.join(app.getPath("userData"), "hosts_backup");
 
 (async () => {
   isDev = (await import("electron-is-dev")).default;
   createWindow();
-  startProxyServer(); // Inicia el servidor proxy
 })();
 
 function createWindow() {
@@ -31,44 +31,77 @@ function createWindow() {
   mainWindow.loadURL(startURL);
 }
 
-function startProxyServer() {
-  const server = http.createServer((req, res) => {
-    const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-    const domain = parsedUrl.hostname;
+// Function to read and backup the original hosts file
+function backupHostsFile() {
+  if (fs.existsSync(hostsFilePath)) {
+    fs.copyFileSync(hostsFilePath, hostsBackupPath);
+  }
+}
 
-    // Verifica si el dominio está bloqueado
-    if (blockedDomains.includes(domain)) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end("Domain is blocked");
-      console.log(`Blocked request to: ${domain}`);
-    } else {
-      // Redirige la solicitud a su destino real
-      proxy.web(req, res, { target: req.url });
+// Function to restore the original hosts file
+function restoreHostsFile() {
+  if (fs.existsSync(hostsBackupPath)) {
+    fs.copyFileSync(hostsBackupPath, hostsFilePath);
+  }
+}
+
+// Function to modify the hosts file
+function modifyHostsFile() {
+  let hostsContent = fs.readFileSync(hostsFilePath, "utf8");
+  let newHostsContent = hostsContent;
+
+  // Remove previous blocked domains entries
+  blockedDomains.forEach((domain) => {
+    const regex = new RegExp(`^127.0.0.1\\s+${domain}`, "gm");
+    newHostsContent = newHostsContent.replace(regex, "");
+  });
+
+  blockedDomains.forEach((domain) => {
+    newHostsContent += `\n127.0.0.1 ${domain}`;
+  });
+
+  sudo.exec(
+    `echo "${newHostsContent.trim()}" | sudo tee ${hostsFilePath}`,
+    { name: "URL Blocker" },
+    (error) => {
+      if (error) {
+        console.error("Failed to modify hosts file:", error);
+      } else {
+        console.log("Hosts file updated successfully.");
+      }
     }
-  });
-
-  server.listen(8080, () => {
-    console.log("Proxy server running on http://localhost:8080");
-  });
+  );
 }
 
 ipcMain.on("block-domain", (event, domain) => {
-  blockedDomains.push(domain);
-  console.log(`Domain blocked: ${domain}`);
+  // Ensure domain format is correct
+  domain = domain.replace(/https?:\/\//, "").replace(/\/$/, "");
+  if (!blockedDomains.includes(domain)) {
+    blockedDomains.push(domain);
+    modifyHostsFile();
+    console.log(`Domain blocked: ${domain}`);
+  }
 });
 
 ipcMain.on("unblock-domain", (event, domain) => {
-  const index = blockedDomains.indexOf(domain);
-  if (index !== -1) {
-    blockedDomains.splice(index, 1);
-    console.log(`Domain unblocked: ${domain}`);
-  }
+  domain = domain.replace(/https?:\/\//, "").replace(/\/$/, "");
+  blockedDomains = blockedDomains.filter((d) => d !== domain);
+  modifyHostsFile();
+  console.log(`Domain unblocked: ${domain}`);
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  backupHostsFile();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
+    restoreHostsFile();
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  restoreHostsFile();
 });
